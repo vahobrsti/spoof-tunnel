@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ParsaKSH/spoof-tunnel/internal/tester"
 	"github.com/ParsaKSH/spoof-tunnel/panel/internal/auth"
 	"github.com/ParsaKSH/spoof-tunnel/panel/internal/manager"
 	"github.com/gin-contrib/cors"
@@ -15,6 +16,7 @@ import (
 type Server struct {
 	db      *gorm.DB
 	manager *manager.Manager
+	tester  *tester.Runner
 	router  *gin.Engine
 }
 
@@ -35,6 +37,7 @@ func NewServer(database *gorm.DB, mgr *manager.Manager) *Server {
 	s := &Server{
 		db:      database,
 		manager: mgr,
+		tester:  tester.NewRunner(),
 		router:  r,
 	}
 
@@ -75,6 +78,20 @@ func (s *Server) setupRoutes() {
 			protected.POST("/tunnel/restart", s.handleTunnelRestart)
 			protected.GET("/tunnel/status", s.handleTunnelStatus)
 			protected.GET("/tunnel/logs", s.handleTunnelLogs)
+
+			// Tester
+			protected.POST("/tester/start", s.handleTesterStart)
+			protected.GET("/tester/status", s.handleTesterStatus)
+			protected.POST("/tester/stop", s.handleTesterStop)
+			protected.GET("/tester/results", s.handleTesterResults)
+			protected.GET("/tester/download", s.handleTesterDownload)
+			protected.POST("/tester/upload", s.handleTesterUpload)
+
+			// Spoof IP file management
+			protected.GET("/spoof-ips", s.handleGetSpoofIPs)
+			protected.PUT("/spoof-ips", s.handleSetSpoofIPs)
+			protected.POST("/spoof-ips/upload", s.handleUploadSpoofIPs)
+			protected.GET("/spoof-ips/download", s.handleDownloadSpoofIPs)
 
 			// Settings
 			protected.PUT("/settings/password", s.handleChangePassword)

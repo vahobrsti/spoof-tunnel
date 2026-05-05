@@ -60,4 +60,40 @@ export const api = {
   // Settings
   changePassword: (oldPassword: string, newPassword: string) =>
     request('/settings/password', { method: 'PUT', body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }) }),
+
+  // Tester
+  testerStart: (data: any) => request('/tester/start', { method: 'POST', body: JSON.stringify(data) }),
+  testerStatus: () => request('/tester/status'),
+  testerStop: () => request('/tester/stop', { method: 'POST' }),
+  testerResults: () => request('/tester/results'),
+  testerDownloadUrl: () => `${API_BASE}/tester/download?token=${getToken()}`,
+  testerUpload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/tester/upload`, {
+      method: 'POST',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+  },
+
+  // Spoof IP File
+  getSpoofIPs: () => request('/spoof-ips'),
+  setSpoofIPs: (content: string) => request('/spoof-ips', { method: 'PUT', body: JSON.stringify({ content }) }),
+  uploadSpoofIPs: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/spoof-ips/upload`, {
+      method: 'POST',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+  },
+  downloadSpoofIPsUrl: () => `${API_BASE}/spoof-ips/download?token=${getToken()}`,
 };

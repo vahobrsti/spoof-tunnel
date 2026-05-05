@@ -2,11 +2,15 @@ package api
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/ParsaKSH/spoof-tunnel/internal/tester"
 	"github.com/ParsaKSH/spoof-tunnel/panel/internal/auth"
 	"github.com/ParsaKSH/spoof-tunnel/panel/internal/db"
 	"github.com/gin-gonic/gin"
@@ -243,6 +247,211 @@ func (s *Server) handleChangePassword(c *gin.Context) {
 	// Generate new token
 	token, _ := auth.GenerateToken(user.ID, user.Username)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "token": token})
+}
+
+// ── Tester Handlers ──
+
+func (s *Server) handleTesterStart(c *gin.Context) {
+	var req struct {
+		Mode          string  `json:"mode" binding:"required"`
+		Protocol      string  `json:"protocol" binding:"required"`
+		IPList        string  `json:"ip_list" binding:"required"`
+		DstIP         string  `json:"dst_ip"`
+		DstPort       int     `json:"dst_port"`
+		Timeout       int     `json:"timeout"`
+		PacketCount   int     `json:"packet_count"`
+		MaxPacketLoss float64 `json:"max_packet_loss"`
+		Concurrency   int     `json:"concurrency"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Parse IPs from text
+	srcIPs, err := tester.ParseIPListFromString(req.IPList)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IP list: " + err.Error()})
+		return
+	}
+
+	if len(srcIPs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "IP list is empty"})
+		return
+	}
+
+	cfg := tester.TesterConfig{
+		Mode:          req.Mode,
+		Protocol:      req.Protocol,
+		DstIP:         req.DstIP,
+		DstPort:       req.DstPort,
+		Timeout:       req.Timeout,
+		PacketCount:   req.PacketCount,
+		MaxPacketLoss: req.MaxPacketLoss,
+		Concurrency:   req.Concurrency,
+	}
+
+	switch req.Mode {
+	case "sender":
+		if err := s.tester.RunSender(cfg, srcIPs); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	case "receiver":
+		if err := s.tester.RunReceiver(cfg, srcIPs); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "mode must be 'sender' or 'receiver'"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "started", "ip_count": len(srcIPs)})
+}
+
+func (s *Server) handleTesterStatus(c *gin.Context) {
+	state := s.tester.State()
+	c.JSON(http.StatusOK, state)
+}
+
+func (s *Server) handleTesterStop(c *gin.Context) {
+	s.tester.Stop()
+	c.JSON(http.StatusOK, gin.H{"status": "stopped"})
+}
+
+func (s *Server) handleTesterResults(c *gin.Context) {
+	state := s.tester.State()
+	c.JSON(http.StatusOK, gin.H{
+		"status":  state.Status,
+		"results": state.Results,
+	})
+}
+
+func (s *Server) handleTesterDownload(c *gin.Context) {
+	state := s.tester.State()
+	if len(state.Results) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no results"})
+		return
+	}
+
+	var lines []string
+	for _, r := range state.Results {
+		if r.Passed {
+			lines = append(lines, r.IP)
+		}
+	}
+
+	content := strings.Join(lines, "\n") + "\n"
+	c.Header("Content-Disposition", "attachment; filename=spoof-ips.txt")
+	c.Data(http.StatusOK, "text/plain", []byte(content))
+}
+
+func (s *Server) handleTesterUpload(c *gin.Context) {
+	file, _, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no file uploaded"})
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read file: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"content": string(data),
+	})
+}
+
+// ── Spoof IP File Management ──
+
+func spoofIPFilePath() string {
+	dataDir := os.Getenv("SPOOF_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "/etc/spoof-panel"
+	}
+	return filepath.Join(dataDir, "spoof-ips.txt")
+}
+
+func (s *Server) handleGetSpoofIPs(c *gin.Context) {
+	data, err := os.ReadFile(spoofIPFilePath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusOK, gin.H{"content": "", "count": 0})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	content := strings.TrimSpace(string(data))
+	count := 0
+	if content != "" {
+		count = len(strings.Split(content, "\n"))
+	}
+
+	c.JSON(http.StatusOK, gin.H{"content": content, "count": count})
+}
+
+func (s *Server) handleSetSpoofIPs(c *gin.Context) {
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	content := strings.TrimSpace(req.Content) + "\n"
+	if err := os.WriteFile(spoofIPFilePath(), []byte(content), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	count := len(strings.Split(strings.TrimSpace(req.Content), "\n"))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "count": count})
+}
+
+func (s *Server) handleUploadSpoofIPs(c *gin.Context) {
+	file, _, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no file uploaded"})
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read file: " + err.Error()})
+		return
+	}
+
+	content := strings.TrimSpace(string(data)) + "\n"
+	if err := os.WriteFile(spoofIPFilePath(), []byte(content), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	count := len(strings.Split(strings.TrimSpace(string(data)), "\n"))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "count": count, "content": strings.TrimSpace(string(data))})
+}
+
+func (s *Server) handleDownloadSpoofIPs(c *gin.Context) {
+	data, err := os.ReadFile(spoofIPFilePath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no spoof IP file"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", "attachment; filename=spoof-ips.txt")
+	c.Data(http.StatusOK, "text/plain", data)
 }
 
 // ── Helpers ──
