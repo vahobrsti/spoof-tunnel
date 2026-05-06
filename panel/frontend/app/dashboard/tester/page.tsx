@@ -40,7 +40,7 @@ export default function TesterPage() {
       pollRef.current = setInterval(async () => {
         try {
           const s = await api.testerStatus();
-          setState(s);
+          setState({ ...s, results: s.results || [] });
           if (s.status !== "running" && pollRef.current) {
             clearInterval(pollRef.current);
           }
@@ -95,18 +95,19 @@ export default function TesterPage() {
   };
 
   const handleCopyPassedIPs = () => {
-    const ips = state.results.filter(r => r.passed).map(r => r.ip).join("\n");
+    const ips = results.filter(r => r.passed).map(r => r.ip).join("\n");
     navigator.clipboard.writeText(ips);
   };
 
   const handleApplyToConfig = async () => {
-    const ips = state.results.filter(r => r.passed).map(r => r.ip).join("\n");
+    const ips = results.filter(r => r.passed).map(r => r.ip).join("\n");
     await navigator.clipboard.writeText(ips);
     alert("Passed IPs copied! Go to Tunnels → select instance → Spoof IPs tab to paste them.");
   };
 
-  const passedCount = state.results.filter(r => r.passed).length;
-  const failedCount = state.results.length - passedCount;
+  const results = state.results || [];
+  const passedCount = results.filter(r => r.passed).length;
+  const failedCount = results.length - passedCount;
 
   const lossColor = (pct: number) => {
     if (pct <= 10) return "var(--success)";
@@ -288,11 +289,11 @@ export default function TesterPage() {
           )}
 
           {/* Results Summary */}
-          {state.results.length > 0 && (
+          {results.length > 0 && (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
                 <div style={{ background: "var(--bg-secondary)", borderRadius: 8, padding: "12px", textAlign: "center" }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>{state.results.length}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>{results.length}</div>
                   <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Total</div>
                 </div>
                 <div style={{ background: "#22c55e15", borderRadius: 8, padding: "12px", textAlign: "center" }}>
@@ -330,7 +331,7 @@ export default function TesterPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {state.results.map((r, i) => (
+                    {results.map((r, i) => (
                       <tr key={i}>
                         <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>{r.ip}</td>
                         <td>{r.received}/{r.sent}</td>
@@ -358,7 +359,7 @@ export default function TesterPage() {
             </>
           )}
 
-          {state.results.length === 0 && state.status === "idle" && (
+          {results.length === 0 && state.status === "idle" && (
             <div style={{ textAlign: "center", padding: 48, color: "var(--text-secondary)" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🔬</div>
               <p>Start a test to see results here.</p>
