@@ -108,25 +108,39 @@ jobs:
         run: go build -o /tmp/spoof-panel ./cmd/panel/
 
       - name: Test setup mode
+        id: setup
         run: |
-          SPOOF_DATA_DIR=/tmp/panel-test /tmp/spoof-panel \
+          SETUP_OUT=$(SPOOF_DATA_DIR=/tmp/panel-test /tmp/spoof-panel \
             -setup-user testadmin \
             -setup-pass testpass123 \
-            -setup-port 18888
+            -setup-port 18888)
+          echo "$SETUP_OUT"
+          WEB_PATH=$(echo "$SETUP_OUT" | grep -oP 'Web Path:\s+\K/\S+')
+          echo "web_path=$WEB_PATH" >> $GITHUB_OUTPUT
+          echo "Detected web path: $WEB_PATH"
 
       - name: Start panel and test APIs
         run: |
+          WP="${{ steps.setup.outputs.web_path }}"
+          BASE="http://localhost:18888${WP}"
+          echo "API base: ${BASE}/api"
+
           SPOOF_DATA_DIR=/tmp/panel-test /tmp/spoof-panel -port 18888 &
           PANEL_PID=$!
           sleep 3
 
+          # Root redirect
+          ROOT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18888/)
+          echo "Root redirect: $ROOT_STATUS"
+          [ "$ROOT_STATUS" = "302" ] || exit 1
+
           # Health check
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18888/api/auth/check)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${BASE}/api/auth/check)
           echo "Auth check: $STATUS"
           [ "$STATUS" = "200" ] || exit 1
 
           # Login
-          RESP=$(curl -s -X POST http://localhost:18888/api/auth/login \
+          RESP=$(curl -s -X POST ${BASE}/api/auth/login \
             -H "Content-Type: application/json" \
             -d '{"username":"testadmin","password":"testpass123"}')
           echo "Login response: $RESP"
@@ -135,20 +149,20 @@ jobs:
           echo "Got token: ${TOKEN:0:20}..."
 
           # Dashboard
-          DASH=$(curl -s http://localhost:18888/api/dashboard \
+          DASH=$(curl -s ${BASE}/api/dashboard \
             -H "Authorization: Bearer $TOKEN")
           echo "Dashboard: $DASH"
           echo "$DASH" | grep -q "total" || exit 1
 
           # System info
-          SYS=$(curl -s http://localhost:18888/api/system \
+          SYS=$(curl -s ${BASE}/api/system \
             -H "Authorization: Bearer $TOKEN")
           echo "System: $SYS"
           echo "$SYS" | grep -q "hostname" || exit 1
 
           # Create tunnel instance
           echo "--- Create instance ---"
-          INST=$(curl -s -X POST http://localhost:18888/api/instances \
+          INST=$(curl -s -X POST ${BASE}/api/instances \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"name":"Test Tunnel","mode":"local","send_transport":"tcp","recv_transport":"udp","spoof_ip":"1.2.3.4","spoof_port":443}')
@@ -159,21 +173,21 @@ jobs:
 
           # List instances
           echo "--- List instances ---"
-          LIST=$(curl -s http://localhost:18888/api/instances \
+          LIST=$(curl -s ${BASE}/api/instances \
             -H "Authorization: Bearer $TOKEN")
           echo "$LIST"
           echo "$LIST" | grep -q "send_transport" || exit 1
 
           # Get instance
           echo "--- Get instance ---"
-          GET=$(curl -s http://localhost:18888/api/instances/$INST_ID \
+          GET=$(curl -s ${BASE}/api/instances/$INST_ID \
             -H "Authorization: Bearer $TOKEN")
           echo "$GET"
           echo "$GET" | grep -q "tcp" || exit 1
 
           # Update instance
           echo "--- Update instance ---"
-          UPD=$(curl -s -X PUT http://localhost:18888/api/instances/$INST_ID \
+          UPD=$(curl -s -X PUT ${BASE}/api/instances/$INST_ID \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"name":"Updated Tunnel","mode":"remote","send_transport":"icmp","recv_transport":"udp"}')
@@ -182,7 +196,7 @@ jobs:
 
           # Set spoof IPs
           echo "--- Set spoof IPs ---"
-          SIPS=$(curl -s -X PUT http://localhost:18888/api/instances/$INST_ID/spoof-ips \
+          SIPS=$(curl -s -X PUT ${BASE}/api/instances/$INST_ID/spoof-ips \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"content":"1.2.3.4\n5.6.7.8"}')
@@ -191,19 +205,20 @@ jobs:
 
           # Delete instance
           echo "--- Delete instance ---"
-          DEL=$(curl -s -X DELETE http://localhost:18888/api/instances/$INST_ID \
+          DEL=$(curl -s -X DELETE ${BASE}/api/instances/$INST_ID \
             -H "Authorization: Bearer $TOKEN")
           echo "$DEL"
           echo "$DEL" | grep -q '"ok":true' || exit 1
 
-          # Frontend serving
-          HTML_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18888/)
+          # Frontend serving (under web path)
+          HTML_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${BASE}/)
           echo "Frontend: $HTML_STATUS"
           [ "$HTML_STATUS" = "200" ] || exit 1
 
-          CSS_TYPE=$(curl -s -I http://localhost:18888/_next/static/chunks/*.css 2>/dev/null | \
-            grep -i content-type | head -1 || echo "no-css")
-          echo "CSS content-type: $CSS_TYPE"
+          # Without web path should 404
+          BAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18888/dashboard/)
+          echo "Bad path: $BAD_STATUS"
+          [ "$BAD_STATUS" = "404" ] || exit 1
 
           kill $PANEL_PID 2>/dev/null
           echo "✓ All integration tests passed"

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { getBasePath } from "@/lib/basepath";
 
 interface Instance {
   id: number;
@@ -33,6 +34,7 @@ export default function TunnelsPage() {
   const [newName, setNewName] = useState("");
   const [newMode, setNewMode] = useState("local");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const basePath = getBasePath();
 
   const fetchInstances = async () => {
     try {
@@ -132,13 +134,13 @@ export default function TunnelsPage() {
       {/* Instance Cards */}
       <div style={{ display: "grid", gap: 16 }}>
         {instances.map(inst => (
-          <div key={inst.id} className="glass-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px" }}>
+          <div key={inst.id} className="glass-card instance-card" style={{ padding: "20px 24px" }}>
             {/* Left */}
             <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1 }}>
               <div className={`status-dot ${inst.status}`} />
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <Link href={`/dashboard/tunnels/edit?id=${inst.id}`} style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", textDecoration: "none" }}>
+                  <Link href={`${basePath}/dashboard/tunnels/edit?id=${inst.id}`} style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", textDecoration: "none" }}>
                     {inst.name}
                   </Link>
                   <span style={{
@@ -149,7 +151,7 @@ export default function TunnelsPage() {
                     {inst.mode.toUpperCase()}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", gap: 12 }}>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <span>Send: {inst.send_transport}</span>
                   <span>Recv: {inst.recv_transport}</span>
                   {inst.remote_addr && <span>Remote: {inst.remote_addr}</span>}
@@ -163,7 +165,7 @@ export default function TunnelsPage() {
             </div>
 
             {/* Right */}
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="instance-actions">
               {inst.status !== "running" ? (
                 <button className="btn btn-success" style={{ padding: "6px 14px", fontSize: 13 }}
                   onClick={() => handleAction(inst.id, "start")} disabled={actionLoading === inst.id}>
@@ -181,7 +183,7 @@ export default function TunnelsPage() {
                   </button>
                 </>
               )}
-              <Link href={`/dashboard/tunnels/edit?id=${inst.id}`} className="btn btn-ghost" style={{ padding: "6px 14px", fontSize: 13, textDecoration: "none" }}>
+              <Link href={`${basePath}/dashboard/tunnels/edit?id=${inst.id}`} className="btn btn-ghost" style={{ padding: "6px 14px", fontSize: 13, textDecoration: "none" }}>
                 ⚙️ Config
               </Link>
               <button className="btn btn-ghost" style={{ padding: "6px 14px", fontSize: 13, color: "var(--danger)" }}

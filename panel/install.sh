@@ -93,14 +93,15 @@ PORT=$(shuf -i 10000-60000 -n 1)
 USERNAME=$(head -c 100 /dev/urandom | tr -dc 'a-z0-9' | head -c 8)
 PASSWORD=$(head -c 100 /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 16)
 
-# Setup the panel (creates DB, user, port)
+# Setup the panel (creates DB, user, port, web_path)
 export SPOOF_DATA_DIR="${DATA_DIR}"
 
 # Create the database and user directly via the binary
-${INSTALL_DIR}/spoof-panel -setup-user "${USERNAME}" -setup-pass "${PASSWORD}" -setup-port "${PORT}" 2>/dev/null || {
-    # Fallback: use the setup endpoint after starting
-    echo -e "${YELLOW}Setting up via API...${NC}"
-}
+SETUP_OUTPUT=$(${INSTALL_DIR}/spoof-panel -setup-user "${USERNAME}" -setup-pass "${PASSWORD}" -setup-port "${PORT}" 2>/dev/null)
+echo "$SETUP_OUTPUT"
+
+# Extract web path from setup output
+WEB_PATH=$(echo "$SETUP_OUTPUT" | grep -oP 'Web Path:\s+\K/\S+' || echo "")
 
 # Create systemd service
 cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
@@ -133,16 +134,17 @@ SERVER_IP=$(curl -s4 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
 
 echo ""
 echo -e "${GREEN}"
-echo "╔══════════════════════════════════════════╗"
-echo "║      Installation Complete! ✓            ║"
-echo "╠══════════════════════════════════════════╣"
-printf "║  Panel URL:  http://%-20s ║\n" "${SERVER_IP}:${PORT}"
-printf "║  Username:   %-27s ║\n" "${USERNAME}"
-printf "║  Password:   %-27s ║\n" "${PASSWORD}"
-echo "╠══════════════════════════════════════════╣"
-echo "║  Service: systemctl status spoof-panel   ║"
-echo "║  Logs:    journalctl -u spoof-panel -f   ║"
-echo "╚══════════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════════════╗"
+echo "║       Installation Complete! ✓                   ║"
+echo "╠══════════════════════════════════════════════════╣"
+printf "║  URL:      http://%-30s║\n" "${SERVER_IP}:${PORT}${WEB_PATH}/"
+printf "║  Username: %-38s║\n" "${USERNAME}"
+printf "║  Password: %-38s║\n" "${PASSWORD}"
+printf "║  Web Path: %-38s║\n" "${WEB_PATH}"
+echo "╠══════════════════════════════════════════════════╣"
+echo "║  Service: systemctl status spoof-panel            ║"
+echo "║  Logs:    journalctl -u spoof-panel -f            ║"
+echo "╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo ""
 echo -e "${YELLOW}⚠  Save these credentials! They won't be shown again.${NC}"

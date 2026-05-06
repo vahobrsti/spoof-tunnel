@@ -15,7 +15,10 @@ export default function LoginPage() {
     try {
       const data = await api.login(username, password);
       setToken(data.token);
-      window.location.href = "/dashboard";
+      // Redirect to dashboard under the web path
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      const base = (parts.length > 0 && parts[0] !== 'login') ? '/' + parts[0] : '';
+      window.location.href = base + "/dashboard";
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {

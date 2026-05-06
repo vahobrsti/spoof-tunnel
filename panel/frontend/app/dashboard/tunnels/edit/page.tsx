@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { getBasePath } from "@/lib/basepath";
 
 const TRANSPORT_OPTIONS = [
   { value: "tcp", label: "TCP (SYN)" },
@@ -14,6 +15,7 @@ function EditContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = Number(searchParams.get("id"));
+  const basePath = getBasePath();
 
   const [config, setConfig] = useState<any>(null);
   const [status, setStatus] = useState("stopped");
@@ -36,7 +38,7 @@ function EditContent() {
       setUptime(data.uptime);
       setStatusError(data.error || "");
     } catch {
-      router.push("/dashboard/tunnels");
+      router.push(basePath + "/dashboard/tunnels");
     }
   };
 
@@ -61,7 +63,7 @@ function EditContent() {
     if (activeTab !== "logs" || !id) return;
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const token = localStorage.getItem("token");
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/instances/${id}/logs?token=${token}`);
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}${basePath}/api/instances/${id}/logs?token=${token}`);
     ws.onmessage = (e) => {
       setLogs(prev => [...prev.slice(-499), e.data]);
     };
@@ -117,7 +119,7 @@ function EditContent() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn btn-ghost" onClick={() => router.push("/dashboard/tunnels")} style={{ padding: "6px 12px" }}>←</button>
+          <button className="btn btn-ghost" onClick={() => router.push(basePath + "/dashboard/tunnels")} style={{ padding: "6px 12px" }}>←</button>
           <div className={`status-dot ${status}`} />
           <h1 style={{ fontSize: 24, fontWeight: 700 }}>{config.name}</h1>
           <span style={{
@@ -176,7 +178,7 @@ function EditContent() {
             </button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <div className="responsive-grid" style={{ gap: 24 }}>
             {/* General */}
             <div className="glass-card">
               <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, color: "var(--accent)" }}>General</h2>

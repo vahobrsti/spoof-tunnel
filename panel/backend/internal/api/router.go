@@ -18,10 +18,11 @@ type Server struct {
 	manager *manager.Manager
 	tester  *tester.Runner
 	router  *gin.Engine
+	webPath string
 }
 
 // NewServer creates a new API server
-func NewServer(database *gorm.DB, mgr *manager.Manager) *Server {
+func NewServer(database *gorm.DB, mgr *manager.Manager, webPath string) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -39,6 +40,7 @@ func NewServer(database *gorm.DB, mgr *manager.Manager) *Server {
 		manager: mgr,
 		tester:  tester.NewRunner(),
 		router:  r,
+		webPath: webPath,
 	}
 
 	s.setupRoutes()
@@ -50,8 +52,13 @@ func (s *Server) Router() *gin.Engine {
 	return s.router
 }
 
+// WebPath returns the configured web path
+func (s *Server) WebPath() string {
+	return s.webPath
+}
+
 func (s *Server) setupRoutes() {
-	api := s.router.Group("/api")
+	api := s.router.Group(s.webPath + "/api")
 	{
 		// Auth (no middleware)
 		api.POST("/auth/login", s.handleLogin)

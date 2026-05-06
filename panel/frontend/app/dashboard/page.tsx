@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { getBasePath } from "@/lib/basepath";
 
 interface DashInstance {
   id: number;
@@ -43,6 +44,7 @@ function formatUptime(seconds: number): string {
 export default function DashboardPage() {
   const [dash, setDash] = useState<DashData | null>(null);
   const [sys, setSys] = useState<SysData | null>(null);
+  const basePath = getBasePath();
 
   const fetchData = async () => {
     try {
@@ -97,7 +99,7 @@ export default function DashboardPage() {
         <div className="glass-card" style={{ marginBottom: 32 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <h2 style={{ fontSize: 18, fontWeight: 600 }}>Tunnel Instances</h2>
-            <Link href="/dashboard/tunnels" className="btn btn-ghost" style={{ textDecoration: "none", fontSize: 13 }}>
+            <Link href={`${basePath}/dashboard/tunnels`} className="btn btn-ghost" style={{ textDecoration: "none", fontSize: 13 }}>
               Manage All →
             </Link>
           </div>
@@ -116,7 +118,7 @@ export default function DashboardPage() {
                 <tr key={inst.id}>
                   <td><div className={`status-dot ${inst.status}`} /></td>
                   <td>
-                    <Link href={`/dashboard/tunnels/edit?id=${inst.id}`} style={{ color: "var(--text-primary)", textDecoration: "none", fontWeight: 500 }}>
+                    <Link href={`${basePath}/dashboard/tunnels/edit?id=${inst.id}`} style={{ color: "var(--text-primary)", textDecoration: "none", fontWeight: 500 }}>
                       {inst.name}
                     </Link>
                   </td>
@@ -149,7 +151,7 @@ export default function DashboardPage() {
         <div className="glass-card" style={{ textAlign: "center", padding: 48, marginBottom: 32 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔗</div>
           <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>No tunnel instances yet.</p>
-          <Link href="/dashboard/tunnels" className="btn btn-primary" style={{ textDecoration: "none" }}>
+          <Link href={`${basePath}/dashboard/tunnels`} className="btn btn-primary" style={{ textDecoration: "none" }}>
             + Create Tunnel
           </Link>
         </div>

@@ -94,9 +94,24 @@ export default function TesterPage() {
     e.target.value = "";
   };
 
+  const copyToClipboard = (text: string) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  };
+
   const handleCopyPassedIPs = () => {
     const ips = results.filter(r => r.passed).map(r => r.ip).join("\n");
-    navigator.clipboard.writeText(ips);
+    copyToClipboard(ips);
   };
 
   const handleDownloadPassedIPs = () => {
@@ -150,7 +165,7 @@ export default function TesterPage() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+      <div className="responsive-grid" style={{ gap: 24 }}>
         {/* Left: Config */}
         <div className="glass-card">
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>

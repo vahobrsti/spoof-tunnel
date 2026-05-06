@@ -64,11 +64,16 @@ func main() {
 		}
 	}
 
+	// Determine web path (random secret URL prefix)
+	webPath := getOrCreateSetting(database, "web_path", func() string {
+		return auth.GenerateRandomString(10)
+	})
+
 	// Create tunnel manager
 	mgr := manager.NewManager(database, binaryPath, dataDir)
 
-	// Create API server
-	srv := api.NewServer(database, mgr)
+	// Create API server — API is prefixed with /{webpath}/api
+	srv := api.NewServer(database, mgr, "/"+webPath)
 
 	// Serve embedded frontend
 	webRoot, err := fs.Sub(webFS, "web")
@@ -76,7 +81,7 @@ func main() {
 		log.Fatalf("embedded web: %v", err)
 	}
 
-	// Custom file server that avoids 301 redirect issues
+	// Custom file server
 	serveFile := func(c *gin.Context, filePath string) bool {
 		f, err := webRoot.Open(filePath)
 		if err != nil {
@@ -89,7 +94,6 @@ func main() {
 			return false
 		}
 
-		// Detect content type from extension
 		ext := filepath.Ext(filePath)
 		contentType := ""
 		switch ext {
@@ -128,26 +132,44 @@ func main() {
 		return true
 	}
 
-	// Serve static files and SPA fallback
+	// All routes require /{webpath}/ prefix
+	prefix := "/" + webPath
 	srv.Router().NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		if path != "/" {
-			filePath := path[1:] // remove leading /
+		// Root → redirect to /{webpath}/
+		if path == "/" || path == "" {
+			c.Redirect(http.StatusFound, prefix+"/")
+			return
+		}
 
-			// Try exact file
+		// Allow /_next/static assets from root (Next.js hardcodes these paths)
+		if strings.HasPrefix(path, "/_next/") {
+			filePath := path[1:] // remove leading /
 			if serveFile(c, filePath) {
 				return
 			}
+		}
 
-			// Try as directory with index.html
-			if serveFile(c, filePath+"/index.html") {
+		// Must start with /{webpath}
+		if !strings.HasPrefix(path, prefix) {
+			c.String(http.StatusNotFound, "not found")
+			return
+		}
+
+		// Strip prefix to get the actual file/page path
+		relPath := strings.TrimPrefix(path, prefix)
+		relPath = strings.TrimPrefix(relPath, "/")
+
+		if relPath != "" {
+			if serveFile(c, relPath) {
 				return
 			}
-
-			// Try stripping trailing slash
-			cleaned := strings.TrimSuffix(filePath, "/")
-			if cleaned != filePath {
+			if serveFile(c, relPath+"/index.html") {
+				return
+			}
+			cleaned := strings.TrimSuffix(relPath, "/")
+			if cleaned != relPath {
 				if serveFile(c, cleaned) {
 					return
 				}
@@ -157,7 +179,7 @@ func main() {
 			}
 		}
 
-		// SPA fallback - serve index.html
+		// SPA fallback
 		serveFile(c, "index.html")
 	})
 
@@ -185,14 +207,26 @@ func main() {
 	}()
 
 	addr := fmt.Sprintf("0.0.0.0:%d", listenPort)
-	log.Printf("╔══════════════════════════════════════╗")
-	log.Printf("║      Spoof Panel v3.0.0              ║")
-	log.Printf("║      http://0.0.0.0:%-17d║", listenPort)
-	log.Printf("╚══════════════════════════════════════╝")
+	fullURL := fmt.Sprintf("http://0.0.0.0:%d/%s/", listenPort, webPath)
+	log.Printf("╔══════════════════════════════════════════════════╗")
+	log.Printf("║         Spoof Panel v3.0.1                       ║")
+	log.Printf("║  %-48s║", fullURL)
+	log.Printf("╚══════════════════════════════════════════════════╝")
 
 	if err := srv.Router().Run(addr); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+// getOrCreateSetting reads a setting from DB, or creates it with a default value
+func getOrCreateSetting(database *gorm.DB, key string, defaultFn func() string) string {
+	var setting db.Setting
+	if err := database.Where("key = ?", key).First(&setting).Error; err == nil {
+		return setting.Value
+	}
+	value := defaultFn()
+	database.Create(&db.Setting{Key: key, Value: value})
+	return value
 }
 
 func runSetup(database *gorm.DB, username, password string, port int) {
@@ -214,15 +248,21 @@ func runSetup(database *gorm.DB, username, password string, port int) {
 
 	database.Create(&db.Setting{Key: "panel_port", Value: fmt.Sprintf("%d", port)})
 
+	// Generate web path if not exists
+	webPath := getOrCreateSetting(database, "web_path", func() string {
+		return auth.GenerateRandomString(10)
+	})
+
 	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════╗")
-	fmt.Println("║      Spoof Panel — Setup Complete    ║")
-	fmt.Println("╠══════════════════════════════════════╣")
-	fmt.Printf("║  Port:     %-26d║\n", port)
-	fmt.Printf("║  Username: %-26s║\n", username)
-	fmt.Printf("║  Password: %-26s║\n", password)
-	fmt.Println("╠══════════════════════════════════════╣")
-	fmt.Printf("║  URL: http://YOUR_IP:%-16d║\n", port)
-	fmt.Println("╚══════════════════════════════════════╝")
+	fmt.Println("╔══════════════════════════════════════════════════╗")
+	fmt.Println("║       Spoof Panel — Setup Complete               ║")
+	fmt.Println("╠══════════════════════════════════════════════════╣")
+	fmt.Printf("║  Port:     %-38d║\n", port)
+	fmt.Printf("║  Username: %-38s║\n", username)
+	fmt.Printf("║  Password: %-38s║\n", password)
+	fmt.Printf("║  Web Path: %-38s║\n", "/"+webPath)
+	fmt.Println("╠══════════════════════════════════════════════════╣")
+	fmt.Printf("║  URL: http://YOUR_IP:%d/%s/\n", port, webPath)
+	fmt.Println("╚══════════════════════════════════════════════════╝")
 	fmt.Println()
 }

@@ -1,4 +1,11 @@
-const API_BASE = typeof window !== 'undefined' ? `${window.location.origin}/api` : '/api';
+import { getBasePath } from './basepath';
+
+function getApiBase(): string {
+  if (typeof window === 'undefined') return '/api';
+  const base = getBasePath();
+  return `${window.location.origin}${base}/api`;
+}
+const API_BASE = getApiBase();
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
