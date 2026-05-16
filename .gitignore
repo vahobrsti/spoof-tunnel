@@ -86,3 +86,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 panel/backend/panel
+spoof-linux-amd64
+spoof-panel-linux-amd64

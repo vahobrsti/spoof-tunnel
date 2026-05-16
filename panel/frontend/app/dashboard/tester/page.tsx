@@ -24,7 +24,9 @@ type TesterState = {
 export default function TesterPage() {
   const [tab, setTab] = useState<"receiver" | "sender">("receiver");
   const [state, setState] = useState<TesterState>({ status: "idle", mode: "", progress: 0, total_ips: 0, passed_count: 0, recv_count: 0, results: [] });
+  const [inputType, setInputType] = useState<"text" | "file_path">("text");
   const [ipList, setIpList] = useState("");
+  const [serverFilePath, setServerFilePath] = useState("");
   const [copied, setCopied] = useState(false);
   const [protocol, setProtocol] = useState("icmp");
   const [dstIP, setDstIP] = useState("");
@@ -55,7 +57,8 @@ export default function TesterPage() {
   }, [state.status]);
 
   const handleStart = async () => {
-    if (!ipList.trim()) { setError("Enter source IPs"); return; }
+    if (inputType === "text" && !ipList.trim()) { setError("Enter source IPs"); return; }
+    if (inputType === "file_path" && !serverFilePath.trim()) { setError("Enter server file path"); return; }
     if (tab === "sender" && !dstIP.trim()) { setError("Enter destination IP"); return; }
     setError("");
     setLoading(true);
@@ -63,7 +66,8 @@ export default function TesterPage() {
       await api.testerStart({
         mode: tab,
         protocol,
-        ip_list: ipList,
+        ip_list: inputType === "text" ? ipList : "",
+        file_path: inputType === "file_path" ? serverFilePath : "",
         dst_ip: dstIP,
         dst_port: dstPort,
         timeout: timeout,
@@ -233,29 +237,57 @@ export default function TesterPage() {
             </div>
           )}
 
-          {/* Source IP List */}
+          {/* Source Input Type */}
           <div style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                Source IPs (one per line, CIDR, ranges)
+            <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>IP List Source</label>
+            <div style={{ display: "flex", gap: 16 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                <input type="radio" checked={inputType === "text"} onChange={() => setInputType("text")} />
+                Manual Input / Upload
               </label>
-              <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => fileInputRef.current?.click()}>
-                📁 Upload File
-              </button>
-              <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: "none" }} accept=".txt,.csv,.list" />
-            </div>
-            <textarea
-              className="input"
-              value={ipList}
-              onChange={e => setIpList(e.target.value)}
-              placeholder={"192.168.1.1\n10.0.0.0/24\n172.16.0.1-172.16.0.50"}
-              rows={8}
-              style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, resize: "vertical" }}
-            />
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-              {ipList.trim() ? `${ipList.trim().split("\n").filter(l => l.trim()).length} lines` : "No IPs entered"}
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                <input type="radio" checked={inputType === "file_path"} onChange={() => setInputType("file_path")} />
+                Server File Path
+              </label>
             </div>
           </div>
+
+          {/* Source Content */}
+          {inputType === "text" ? (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <label style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                  Source IPs (one per line, CIDR, ranges)
+                </label>
+                <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => fileInputRef.current?.click()}>
+                  📁 Upload File
+                </button>
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: "none" }} accept=".txt,.csv,.list" />
+              </div>
+              <textarea
+                className="input"
+                value={ipList}
+                onChange={e => setIpList(e.target.value)}
+                placeholder={"1.1.1.1\n10.0.0.0/8\n192.168.1.1-192.168.1.100"}
+                style={{ height: 120, fontFamily: "monospace", fontSize: 13, resize: "vertical" }}
+              />
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                {ipList.trim() ? `${ipList.trim().split("\n").filter(l => l.trim()).length} lines` : "No IPs entered"}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>
+                Absolute path to IP list file on server (e.g. /opt/ips.txt)
+              </label>
+              <input
+                className="input"
+                value={serverFilePath}
+                onChange={e => setServerFilePath(e.target.value)}
+                placeholder="/path/to/your/ips.txt"
+              />
+            </div>
+          )}
 
           {error && (
             <div style={{ background: "#ef444420", border: "1px solid var(--danger)", borderRadius: 8, padding: "8px 12px", marginBottom: 14, color: "var(--danger)", fontSize: 13 }}>

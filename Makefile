@@ -1,4 +1,4 @@
-.PHONY: all core panel frontend backend clean test
+.PHONY: all core panel frontend backend clean test rust
 
 # ── Build All ──
 all: core panel
