@@ -75,6 +75,15 @@ func main() {
 	// Create API server — API is prefixed with /{webpath}/api
 	srv := api.NewServer(database, mgr, "/"+webPath)
 
+	// Auto-start enabled tunnels
+	var tunnels []db.TunnelInstance
+	if err := database.Where("enabled = ?", true).Find(&tunnels).Error; err == nil {
+		for _, t := range tunnels {
+			log.Printf("Auto-starting tunnel: %s", t.Name)
+			mgr.StartInstance(t.ID)
+		}
+	}
+
 	// Serve embedded frontend
 	webRoot, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -209,7 +218,7 @@ func main() {
 	addr := fmt.Sprintf("0.0.0.0:%d", listenPort)
 	fullURL := fmt.Sprintf("http://0.0.0.0:%d/%s/", listenPort, webPath)
 	log.Printf("╔══════════════════════════════════════════════════╗")
-	log.Printf("║         Spoof Panel v3.0.1                       ║")
+	log.Printf("║         Spoof Panel v3.0.2                       ║")
 	log.Printf("║  %-48s║", fullURL)
 	log.Printf("╚══════════════════════════════════════════════════╝")
 

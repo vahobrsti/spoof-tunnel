@@ -471,7 +471,8 @@ func (s *Server) handleTesterStart(c *gin.Context) {
 	var req struct {
 		Mode          string  `json:"mode" binding:"required"`
 		Protocol      string  `json:"protocol" binding:"required"`
-		IPList        string  `json:"ip_list" binding:"required"`
+		IPList        string  `json:"ip_list"`
+		FilePath      string  `json:"file_path"`
 		DstIP         string  `json:"dst_ip"`
 		DstPort       int     `json:"dst_port"`
 		Timeout       int     `json:"timeout"`
@@ -484,7 +485,24 @@ func (s *Server) handleTesterStart(c *gin.Context) {
 		return
 	}
 
-	ranges, err := tester.ParseIPRangesFromString(req.IPList)
+	var ranges *tester.IPRangeSet
+	var err error
+
+	if req.FilePath != "" {
+		f, errFile := os.Open(req.FilePath)
+		if errFile != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot open file path: " + errFile.Error()})
+			return
+		}
+		defer f.Close()
+		ranges, err = tester.ParseIPRangesFromReader(f)
+	} else if req.IPList != "" {
+		ranges, err = tester.ParseIPRangesFromString(req.IPList)
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "either ip_list or file_path must be provided"})
+		return
+	}
+
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid IP list: " + err.Error()})
 		return
