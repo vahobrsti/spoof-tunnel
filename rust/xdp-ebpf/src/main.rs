@@ -14,7 +14,7 @@ use aya_ebpf::{
     maps::{HashMap, RingBuf},
     programs::XdpContext,
 };
-use aya_ebpf_bindings::helpers::bpf_xdp_load_bytes;
+
 use core::mem;
 
 // ── Fixed offsets (constants for BPF verifier) ──
@@ -179,33 +179,43 @@ fn try_process(ctx: &XdpContext) -> Result<u32, ()> {
     }
 
     // ── 10. Copy payload using bpf_xdp_load_bytes ──
-    // This kernel helper handles all bounds checking internally,
-    // completely avoiding the BPF verifier issue with variable-offset
-    // packet pointer access in loops.
-    // Force the verifier to see a bounded value via inline asm.
-    // LLVM optimizes away Rust-level & 0x7FF, so we use asm to emit
-    // the AND instruction directly in BPF bytecode.
-    let safe_len: u32;
+    // The BPF verifier needs to know the length argument is in [1, MAX].
+    // LLVM cannot propagate range info across opaque asm boundaries, so we use
+    // a single asm block that: masks the value AND conditionally jumps past the
+    // helper call if it's zero. The verifier sees the branch and knows that
+    // on the fall-through path the value is >= 1.
+    let payload_dst = unsafe { entry_ptr.add(meta_size as usize) };
+    let ctx_ptr = ctx.ctx;
+    let copied_len: i64;
+
+    // Safety: payload_offset and payload_len are both bounded and checked above.
     unsafe {
         core::arch::asm!(
-            "r0 = r1",
-            "r0 &= 2047",
-            "r0 |= 1",
-            in("r1") payload_len,
-            out("r0") safe_len,
+            // r2 = payload_len & 0x7FF  →  verifier: r2 ∈ [0, 2047]
+            "r2 = r4",
+            "r2 &= 2047",
+            // if r2 == 0, skip the helper call
+            "if r2 == 0 goto +5",
+            // bpf_xdp_load_bytes(ctx, offset, dst, len) — args in r1-r4
+            "r1 = r6",          // ctx
+            "r3 = r5",          // dst buffer
+            "r4 = r2",          // len (verifier: [1, 2047] on this path)
+            "call 189",         // bpf_xdp_load_bytes
+            "goto +1",
+            // zero case: set return to -1 (error)
+            "r0 = -1",
+            in("r4") payload_len,
+            in("r5") payload_dst,
+            in("r6") ctx_ptr,
+            out("r0") copied_len,
+            // clobbers
+            lateout("r1") _,
+            lateout("r2") _,
+            lateout("r3") _,
+            lateout("r4") _,
         );
     }
-    let payload_dst = unsafe { entry_ptr.add(meta_size as usize) };
-    let ret = unsafe {
-        bpf_xdp_load_bytes(
-            ctx.ctx as *mut _,
-            payload_offset,
-            payload_dst as *mut _,
-            safe_len,
-        )
-    };
-    if ret != 0 {
-        // Copy failed — discard entry
+    if copied_len < 0 {
         entry.discard(0);
         return Ok(xdp_action::XDP_PASS);
     }
