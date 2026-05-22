@@ -86,6 +86,15 @@ fn try_process(ctx: &XdpContext) -> Result<u32, ()> {
     let src_ip = unsafe { *((ip_base + 12) as *const u32) };
     let ip_proto = unsafe { *((ip_base + 9) as *const u8) };
 
+    // ── 2b. Skip fragmented packets ──
+    // IP header bytes 6-7: 3 flag bits + 13-bit fragment offset.
+    // MF (More Fragments) = bit 13 (0x2000), frag offset = bits 0-12 (0x1FFF).
+    // If either is set, this is a fragment — let the kernel handle reassembly.
+    let flags_frag = unsafe { *((ip_base + 6) as *const u16) };
+    if u16::from_be(flags_frag) & 0x3FFF != 0 {
+        return Ok(xdp_action::XDP_PASS);
+    }
+
     // ── 3. Load config ──
     let key: u32 = 0;
     let cfg = match unsafe { CONFIG.get(&key) } {
