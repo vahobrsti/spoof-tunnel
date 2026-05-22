@@ -61,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           }}>
             SP
           </div>
-          <span className="brand-title">Spoof Tunnel v3.0.2</span>
+          <span className="brand-title">Spoof Tunnel v3.1.0</span>
         </div>
         <div className="header-actions">
           <a
@@ -144,7 +144,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Footer */}
       <footer className="app-footer">
-        <span>Spoof Tunnel v3.0.2 — Rust Transport Engine</span>
+        <span>Spoof Tunnel v3.1.0 — Rust Transport Engine</span>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <a
             href="https://github.com/ParsaKSH/spoof-tunnel"

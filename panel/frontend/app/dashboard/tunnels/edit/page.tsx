@@ -223,6 +223,42 @@ function EditContent() {
                     {TRANSPORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
+
+                {/* XDP Section */}
+                <div style={{ padding: "12px", background: "var(--bg-card-hover)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: "block", fontSize: 13, color: "var(--text-secondary)", marginBottom: 6 }}>
+                      eBPF / XDP Acceleration (Linux only)
+                    </label>
+                    <select
+                      className="input"
+                      value={config.xdp_interface ? "xdp" : "noxdp"}
+                      onChange={e => {
+                        if (e.target.value === "noxdp") update("xdp_interface", "");
+                        else update("xdp_interface", "eth0");
+                      }}
+                    >
+                      <option value="noxdp">Disabled (Standard Raw Sockets)</option>
+                      <option value="xdp">Enabled (Kernel-Bypass)</option>
+                    </select>
+                  </div>
+                  {config.xdp_interface !== undefined && config.xdp_interface !== "" && (
+                    <div>
+                      <label style={{ display: "block", fontSize: 13, color: "var(--text-secondary)", marginBottom: 6 }}>
+                        Network Interface (e.g. eth0, ens3)
+                      </label>
+                      <input
+                        className="input"
+                        value={config.xdp_interface}
+                        onChange={e => update("xdp_interface", e.target.value)}
+                        placeholder="eth0"
+                      />
+                      <p style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
+                        Drastically improves receive performance. Requires root and Linux kernel ≥ 5.8.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
