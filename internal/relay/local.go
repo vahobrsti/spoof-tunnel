@@ -123,6 +123,10 @@ func (l *Local) Run() {
 
 func (l *Local) uplinkLoop() {
 	buf := make([]byte, 65536)
+	mtu := l.cfg.MTU
+	if mtu <= 0 {
+		mtu = 1400
+	}
 	for {
 		n, addr, err := l.udpConn.ReadFromUDP(buf)
 		if err != nil {
@@ -132,11 +136,19 @@ func (l *Local) uplinkLoop() {
 			continue
 		}
 		l.lastAppAddr.Store(addr)
-		if err := l.sender.Send(buf[:n], l.cfg.RemoteIP, l.cfg.RemotePort); err != nil {
-			continue
+		data := buf[:n]
+		for len(data) > 0 {
+			chunk := data
+			if len(chunk) > mtu {
+				chunk = data[:mtu]
+			}
+			if err := l.sender.Send(chunk, l.cfg.RemoteIP, l.cfg.RemotePort); err != nil {
+				break
+			}
+			l.up.Add(uint64(len(chunk)))
+			l.upPkts.Add(1)
+			data = data[len(chunk):]
 		}
-		l.up.Add(uint64(n))
-		l.upPkts.Add(1)
 	}
 }
 

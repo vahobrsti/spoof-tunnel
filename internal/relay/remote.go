@@ -142,6 +142,10 @@ func (r *Remote) uplinkLoop() {
 
 func (r *Remote) downlinkLoop() {
 	buf := make([]byte, 65536)
+	mtu := r.cfg.MTU
+	if mtu <= 0 {
+		mtu = 1400
+	}
 	for {
 		n, _, err := r.udpConn.ReadFromUDP(buf)
 		if err != nil {
@@ -150,11 +154,19 @@ func (r *Remote) downlinkLoop() {
 		if n == 0 {
 			continue
 		}
-		if err := r.sender.Send(buf[:n], r.cfg.ClientIP, r.cfg.ClientPort); err != nil {
-			continue
+		data := buf[:n]
+		for len(data) > 0 {
+			chunk := data
+			if len(chunk) > mtu {
+				chunk = data[:mtu]
+			}
+			if err := r.sender.Send(chunk, r.cfg.ClientIP, r.cfg.ClientPort); err != nil {
+				break
+			}
+			r.down.Add(uint64(len(chunk)))
+			r.downPkts.Add(1)
+			data = data[len(chunk):]
 		}
-		r.down.Add(uint64(n))
-		r.downPkts.Add(1)
 	}
 }
 
