@@ -37,6 +37,9 @@ type Config struct {
 
 	// XDP/eBPF acceleration (receive path)
 	XDPInterface string `json:"xdp_interface,omitempty"` // NIC to attach XDP to (e.g. "eth0")
+
+	// MTU for outgoing spoofed packets (default: 1400)
+	MTU int `json:"mtu,omitempty"`
 }
 
 func Load(path string) (*Config, error) {
@@ -90,8 +93,8 @@ func LoadIPListFile(path string) ([]net.IP, error) {
 	return ips, nil
 }
 
-func (c *Config) MergeLocal(listen, remote string, remotePort, recvPort int, spoofIP string, spoofPort int, peerSpoofIP, spoofIPFile, sendTransport, recvTransport string) (
-	oListen, oRemote string, oRemotePort, oRecvPort int, oSpoofIP string, oSpoofPort int, oPeerSpoofIP, oSpoofIPFile, oSendTransport, oRecvTransport string,
+func (c *Config) MergeLocal(listen, remote string, remotePort, recvPort int, spoofIP string, spoofPort int, peerSpoofIP, spoofIPFile, sendTransport, recvTransport string, mtu int) (
+	oListen, oRemote string, oRemotePort, oRecvPort int, oSpoofIP string, oSpoofPort int, oPeerSpoofIP, oSpoofIPFile, oSendTransport, oRecvTransport string, oMTU int,
 ) {
 	oListen = firstStr(listen, c.Listen, "127.0.0.1:5000")
 	oRemote = firstStr(remote, c.Remote, "")
@@ -103,11 +106,12 @@ func (c *Config) MergeLocal(listen, remote string, remotePort, recvPort int, spo
 	oSpoofIPFile = firstStr(spoofIPFile, c.SpoofIPFile, "")
 	oSendTransport = firstStr(sendTransport, c.SendTransport, "")
 	oRecvTransport = firstStr(recvTransport, c.RecvTransport, "")
+	oMTU = firstInt(mtu, c.MTU, 0)
 	return
 }
 
-func (c *Config) MergeRemote(listenPort int, forward, clientIP string, clientPort int, spoofIP string, spoofPort int, peerSpoofIP string, spoofIPFile, sendTransport, recvTransport string) (
-	oListenPort int, oForward, oClientIP string, oClientPort int, oSpoofIP string, oSpoofPort int, oPeerSpoofIP string, oSpoofIPFile, oSendTransport, oRecvTransport string,
+func (c *Config) MergeRemote(listenPort int, forward, clientIP string, clientPort int, spoofIP string, spoofPort int, peerSpoofIP string, spoofIPFile, sendTransport, recvTransport string, mtu int) (
+	oListenPort int, oForward, oClientIP string, oClientPort int, oSpoofIP string, oSpoofPort int, oPeerSpoofIP string, oSpoofIPFile, oSendTransport, oRecvTransport string, oMTU int,
 ) {
 	oListenPort = firstInt(listenPort, c.ListenPort, 8090)
 	oForward = firstStr(forward, c.Forward, "127.0.0.1:51820")
@@ -119,6 +123,7 @@ func (c *Config) MergeRemote(listenPort int, forward, clientIP string, clientPor
 	oSpoofIPFile = firstStr(spoofIPFile, c.SpoofIPFile, "")
 	oSendTransport = firstStr(sendTransport, c.SendTransport, "")
 	oRecvTransport = firstStr(recvTransport, c.RecvTransport, "")
+	oMTU = firstInt(mtu, c.MTU, 0)
 	return
 }
 

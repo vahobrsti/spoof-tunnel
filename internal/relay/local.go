@@ -22,6 +22,7 @@ type LocalConfig struct {
 	SendTransport string // "tcp", "udp", "icmp", "icmpv6"
 	RecvTransport string // "tcp", "udp", "icmp", "icmpv6"
 	XDPInterface  string // network interface for XDP (empty = disabled)
+	MTU           int    // max payload size for outgoing packets (0 = default 1400)
 }
 
 type Local struct {
@@ -72,7 +73,7 @@ func NewLocal(cfg LocalConfig) (*Local, error) {
 
 	senderCfg := transport.SenderConfig{
 		SourcePort: cfg.SpoofPort,
-		MTU:        1400,
+		MTU:        cfg.MTU,
 	}
 	if len(cfg.SpoofIPs) > 0 {
 		senderCfg.SourceIPs = cfg.SpoofIPs

@@ -54,11 +54,11 @@ func runCmd() *cobra.Command {
 			case "local":
 				runLocal(cfg.Listen, cfg.Remote, cfg.RemotePort, cfg.RecvPort,
 					cfg.SpoofIP, cfg.SpoofPort, cfg.PeerSpoofIP, cfg.SpoofIPFile,
-					cfg.SendTransport, cfg.RecvTransport, cfg.XDPInterface)
+					cfg.SendTransport, cfg.RecvTransport, cfg.XDPInterface, cfg.MTU)
 			case "remote":
 				runRemote(cfg.ListenPort, cfg.Forward, cfg.ClientIP, cfg.ClientPort,
 					cfg.SpoofIP, cfg.SpoofPort, cfg.PeerSpoofIP,
-					cfg.SpoofIPFile, cfg.SendTransport, cfg.RecvTransport, cfg.XDPInterface)
+					cfg.SpoofIPFile, cfg.SendTransport, cfg.RecvTransport, cfg.XDPInterface, cfg.MTU)
 			default:
 				log.Fatalf("unknown mode in config: %q", cfg.Mode)
 			}
@@ -83,6 +83,7 @@ func localCmd() *cobra.Command {
 		recvTransport string
 		xdpInterface  string
 		configFile    string
+		mtu           int
 	)
 
 	cmd := &cobra.Command{
@@ -103,8 +104,8 @@ func localCmd() *cobra.Command {
 			}
 
 			if fileCfg != nil {
-				listen, remoteAddr, remotePort, recvPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport =
-					fileCfg.MergeLocal(listen, remoteAddr, remotePort, recvPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport)
+				listen, remoteAddr, remotePort, recvPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, mtu =
+					fileCfg.MergeLocal(listen, remoteAddr, remotePort, recvPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, mtu)
 			}
 
 			if remoteAddr == "" {
@@ -114,7 +115,7 @@ func localCmd() *cobra.Command {
 				log.Fatal("--spoof-ip or --spoof-ip-file is required")
 			}
 
-			runLocal(listen, remoteAddr, remotePort, recvPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, xdpInterface)
+			runLocal(listen, remoteAddr, remotePort, recvPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, xdpInterface, mtu)
 		},
 	}
 
@@ -130,6 +131,7 @@ func localCmd() *cobra.Command {
 	cmd.Flags().StringVar(&recvTransport, "recv-transport", "", "recv transport: tcp, udp, icmp, icmpv6 (default: udp)")
 	cmd.Flags().StringVar(&xdpInterface, "xdp-interface", "", "network interface for XDP acceleration (e.g. eth0)")
 	cmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file (CLI flags override)")
+	cmd.Flags().IntVar(&mtu, "mtu", 0, "MTU for outgoing spoofed packets (default: 1400)")
 
 	return cmd
 }
@@ -148,6 +150,7 @@ func remoteCmd() *cobra.Command {
 		recvTransport string
 		xdpInterface  string
 		configFile    string
+		mtu           int
 	)
 
 	cmd := &cobra.Command{
@@ -168,8 +171,8 @@ func remoteCmd() *cobra.Command {
 			}
 
 			if fileCfg != nil {
-				listenPort, forward, clientIP, clientPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport =
-					fileCfg.MergeRemote(listenPort, forward, clientIP, clientPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport)
+				listenPort, forward, clientIP, clientPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, mtu =
+					fileCfg.MergeRemote(listenPort, forward, clientIP, clientPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, mtu)
 			}
 
 			if clientIP == "" {
@@ -179,7 +182,7 @@ func remoteCmd() *cobra.Command {
 				log.Fatal("--spoof-ip or --spoof-ip-file is required")
 			}
 
-			runRemote(listenPort, forward, clientIP, clientPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, xdpInterface)
+			runRemote(listenPort, forward, clientIP, clientPort, spoofIP, spoofPort, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, xdpInterface, mtu)
 		},
 	}
 
@@ -195,6 +198,7 @@ func remoteCmd() *cobra.Command {
 	cmd.Flags().StringVar(&recvTransport, "recv-transport", "", "recv transport: tcp, udp, icmp, icmpv6 (default: tcp)")
 	cmd.Flags().StringVar(&xdpInterface, "xdp-interface", "", "network interface for XDP acceleration (e.g. eth0)")
 	cmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file (CLI flags override)")
+	cmd.Flags().IntVar(&mtu, "mtu", 0, "MTU for outgoing spoofed packets (default: 1400)")
 
 	return cmd
 }
@@ -215,7 +219,7 @@ func loadSpoofIPs(spoofIP, spoofIPFile string) ([]net.IP, error) {
 	return []net.IP{ip}, nil
 }
 
-func runLocal(listen, remoteAddr string, remotePort, recvPort int, spoofIP string, spoofPort int, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, xdpInterface string) {
+func runLocal(listen, remoteAddr string, remotePort, recvPort int, spoofIP string, spoofPort int, peerSpoofIP, spoofIPFile, sendTransport, recvTransport, xdpInterface string, mtu int) {
 	rIP := net.ParseIP(remoteAddr)
 	if rIP == nil {
 		log.Fatalf("invalid remote IP: %s", remoteAddr)
@@ -257,6 +261,7 @@ func runLocal(listen, remoteAddr string, remotePort, recvPort int, spoofIP strin
 		SendTransport: sendTransport,
 		RecvTransport: recvTransport,
 		XDPInterface:  xdpInterface,
+		MTU:           mtu,
 	}
 
 	l, err := relay.NewLocal(cfg)
@@ -274,6 +279,11 @@ func runLocal(listen, remoteAddr string, remotePort, recvPort int, spoofIP strin
 	fmt.Printf("  Spoof port:  %d\n", spoofPort)
 	fmt.Printf("  Send:        %s\n", sendTransport)
 	fmt.Printf("  Recv:        %s\n", recvTransport)
+	if mtu > 0 {
+		fmt.Printf("  MTU:         %d\n", mtu)
+	} else {
+		fmt.Printf("  MTU:         1400 (default)\n")
+	}
 	fmt.Println()
 
 	go func() {
@@ -289,7 +299,7 @@ func runLocal(listen, remoteAddr string, remotePort, recvPort int, spoofIP strin
 	l.Run()
 }
 
-func runRemote(listenPort int, forward, clientIP string, clientPort int, spoofIP string, spoofPort int, peerSpoofIP string, spoofIPFile, sendTransport, recvTransport, xdpInterface string) {
+func runRemote(listenPort int, forward, clientIP string, clientPort int, spoofIP string, spoofPort int, peerSpoofIP string, spoofIPFile, sendTransport, recvTransport, xdpInterface string, mtu int) {
 	cIP := net.ParseIP(clientIP)
 	if cIP == nil {
 		log.Fatalf("invalid client-ip: %s", clientIP)
@@ -328,6 +338,7 @@ func runRemote(listenPort int, forward, clientIP string, clientPort int, spoofIP
 		SendTransport: sendTransport,
 		RecvTransport: recvTransport,
 		XDPInterface:  xdpInterface,
+		MTU:           mtu,
 	}
 
 	r, err := relay.NewRemote(cfg)
@@ -345,6 +356,11 @@ func runRemote(listenPort int, forward, clientIP string, clientPort int, spoofIP
 	fmt.Printf("  Spoof port:  %d\n", spoofPort)
 	fmt.Printf("  Send:        %s\n", sendTransport)
 	fmt.Printf("  Recv:        %s\n", recvTransport)
+	if mtu > 0 {
+		fmt.Printf("  MTU:         %d\n", mtu)
+	} else {
+		fmt.Printf("  MTU:         1400 (default)\n")
+	}
 	fmt.Println()
 
 	go func() {
