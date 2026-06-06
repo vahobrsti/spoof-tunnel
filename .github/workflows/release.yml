@@ -141,7 +141,8 @@ jobs:
           CC: ${{ matrix.cc }}
         run: |
           BINARY_NAME="spoof-linux-${{ matrix.goarch }}"
-          go build -ldflags="-s -w" -o "${BINARY_NAME}" ./cmd/spoof/
+          VERSION="${{ github.ref_name }}"
+          go build -ldflags="-s -w -X main.Version=${VERSION#v}" -o "${BINARY_NAME}" ./cmd/spoof/
           echo "BINARY_NAME=${BINARY_NAME}" >> $GITHUB_ENV
 
       - name: Upload artifact
